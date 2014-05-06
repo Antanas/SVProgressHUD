@@ -30,6 +30,14 @@ CGFloat SVProgressHUDRingRadius = 14;
 CGFloat SVProgressHUDRingThickness = 6;
 #endif
 
+typedef NS_ENUM(NSInteger, SVProgressHUDState)
+{
+    SVProgressHUDStateNone,
+    SVProgressHUDStatePresenting,
+    SVProgressHUDStatePresented,
+    SVProgressHUDStateDismissing
+};
+
 @interface SVProgressHUD ()
 
 @property (nonatomic, readwrite) SVProgressHUDMaskType maskType;
@@ -49,6 +57,8 @@ CGFloat SVProgressHUDRingThickness = 6;
 
 @property (nonatomic, readonly) CGFloat visibleKeyboardHeight;
 @property (nonatomic, assign) UIOffset offsetFromCenter;
+
+@property (nonatomic, assign) SVProgressHUDState state;
 
 - (void)showProgress:(float)progress
               status:(NSString*)string
@@ -189,6 +199,7 @@ CGFloat SVProgressHUDRingThickness = 6;
 		self.alpha = 0;
         self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         self.activityCount = 0;
+        _state = SVProgressHUDStateNone;
     }
 	
     return self;
@@ -494,7 +505,7 @@ CGFloat SVProgressHUDRingThickness = 6;
     [self.overlayView setHidden:NO];
     [self positionHUD:nil];
     
-    if(self.alpha != 1) {
+    if(self.state != SVProgressHUDStatePresented) {
         NSDictionary *userInfo = [self notificationUserInfo];
         [[NSNotificationCenter defaultCenter] postNotificationName:SVProgressHUDWillAppearNotification
                                                             object:nil
@@ -512,6 +523,7 @@ CGFloat SVProgressHUDRingThickness = 6;
                               delay:0
                             options:UIViewAnimationOptionAllowUserInteraction | UIViewAnimationCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState
                          animations:^{
+                             self.state = SVProgressHUDStatePresenting;
                              self.hudView.transform = CGAffineTransformScale(self.hudView.transform, 1/1.3, 1/1.3);
                              
                              if(self.isClear) // handle iOS 7 UIToolbar not answer well to hierarchy opacity change
@@ -520,11 +532,13 @@ CGFloat SVProgressHUDRingThickness = 6;
                                  self.alpha = 1;
                          }
                          completion:^(BOOL finished){
-                             [[NSNotificationCenter defaultCenter] postNotificationName:SVProgressHUDDidAppearNotification
-                                                                                 object:nil
-                                                                               userInfo:userInfo];
-                             UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, nil);
-                             UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, string);
+                             if (self.state == SVProgressHUDStatePresenting) {
+                                 [[NSNotificationCenter defaultCenter] postNotificationName:SVProgressHUDDidAppearNotification
+                                                                                     object:nil
+                                                                                   userInfo:userInfo];
+                                 UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, nil);
+                                 UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, string);
+                             }
                          }];
         
         [self setNeedsDisplay];
@@ -572,6 +586,7 @@ CGFloat SVProgressHUDRingThickness = 6;
                           delay:0
                         options:UIViewAnimationCurveEaseIn | UIViewAnimationOptionAllowUserInteraction
                      animations:^{
+                         self.state = SVProgressHUDStateDismissing;
                          self.hudView.transform = CGAffineTransformScale(self.hudView.transform, 0.8, 0.8);
                          if(self.isClear) // handle iOS 7 UIToolbar not answer well to hierarchy opacity change
                              self.hudView.alpha = 0;
@@ -579,7 +594,8 @@ CGFloat SVProgressHUDRingThickness = 6;
                              self.alpha = 0;
                      }
                      completion:^(BOOL finished){
-                         if(self.alpha == 0 || self.hudView.alpha == 0) {
+                         if(self.state == SVProgressHUDStateDismissing) {
+                             self.state = SVProgressHUDStateNone;
                              self.alpha = 0;
                              self.hudView.alpha = 0;
                              
